@@ -102,6 +102,26 @@ BEGIN
 END
 $$ LANGUAGE plpgsql SET search_path=provsql,pg_temp SECURITY DEFINER;
 
+CREATE OR REPLACE FUNCTION delete_entries()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    -- Update the provenance for the rows that were not deleted?
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SET search_path=provsql, pg_temp SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION update_entries()
+    RETURNS TRIGGER AS
+    $$
+    BEGIN
+        RETURN;
+    END;
+$$ LANGUAGE plpgsql SET search_path=provsql, pg_temp SECURITY DEFINER;
+
+
+
+
 CREATE OR REPLACE FUNCTION add_provenance(_tbl regclass)
   RETURNS void AS
 $$
@@ -109,6 +129,9 @@ BEGIN
   EXECUTE format('ALTER TABLE %I ADD COLUMN provsql UUID UNIQUE DEFAULT public.uuid_generate_v4()', _tbl);
   EXECUTE format('SELECT provsql.create_gate(provsql, ''input'') FROM %I', _tbl);
   EXECUTE format('CREATE TRIGGER add_gate BEFORE INSERT ON %I FOR EACH ROW EXECUTE PROCEDURE provsql.add_gate_trigger()',_tbl);
+  -- Add a trigger here for delete and update
+  EXECUTE format('CREATE TRIGGER delete_prov BEFORE DELETE ON %I FOR EACH ROW EXECUTE PROCEDURE provsql.delete_entries()', _tbl);
+  EXECUTE format('CREATE TRIGGER update_prov BEFORE UPDATE ON %I FOR EACH ROW EXECUTE PROCEDURE provsql.update_entries()', _tbl);
 END
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -120,6 +143,9 @@ BEGIN
   EXECUTE format('ALTER TABLE %I DROP COLUMN provsql', _tbl);
   BEGIN
     EXECUTE format('DROP TRIGGER add_gate on %I', _tbl);
+    -- Remove the triggers for delete and update
+    EXECUTE format('DROP TRIGGER delete_entries on %I', _tbl);
+    EXECUTE format('DROP TRIGGER update_entries on %I', _tbl);
   EXCEPTION WHEN undefined_object THEN
   END;
 END
